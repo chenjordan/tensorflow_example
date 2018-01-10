@@ -16,6 +16,7 @@ from matplotlib import pyplot as plt
 from PIL import Image
 
 import glob
+import time
 
 if tf.__version__ < '1.4.0':
   raise ImportError('Please upgrade your tensorflow installation to v1.4.* or later!')
@@ -32,7 +33,6 @@ sys.path.append("../../")
 
 # Object detection imports
 from utils import label_map_util
-
 from utils import visualization_utils as vis_util
 
 # What model to download.
@@ -55,6 +55,7 @@ print 'PATH_TO_LABELS:{}'.format(PATH_TO_LABELS)
 print '--- Download model ---'
 opener = urllib.request.URLopener()
 opener.retrieve(DOWNLOAD_BASE + MODEL_FILE, MODEL_FILE)
+
 """
 tar_file = tarfile.open(MODEL_FILE)
 
@@ -63,6 +64,7 @@ for file in tar_file.getmembers():
   if 'frozen_inference_graph.pb' in file_name:
     tar_file.extract(file, os.getcwd())
 """
+
 # Load a tensorflow model into memory
 print '--- Load tensorflow model ---'
 detection_graph = tf.Graph()
@@ -91,11 +93,12 @@ def load_image_into_numpy_array(image):
 # image2.jpg
 # If you want to test the code with your images, just add path to the images to the TEST_IMAGE_PATHS.
 PATH_TO_TEST_IMAGES_DIR = '../tmp_img'
+PATH_TO_RESULT_DIR = '../test_img_result'
+
 #TEST_IMAGE_PATHS = [ os.path.join(PATH_TO_TEST_IMAGES_DIR, 'image{}.jpg'.format(i)) for i in range(1, 3) ]
 TEST_IMAGE_PATHS = []
 
 for file in glob.glob('{}/*.jpg'.format(PATH_TO_TEST_IMAGES_DIR)):
-    print file
     TEST_IMAGE_PATHS.append(file)
 
 
@@ -116,24 +119,26 @@ with detection_graph.as_default():
     detection_scores = detection_graph.get_tensor_by_name('detection_scores:0')
     detection_classes = detection_graph.get_tensor_by_name('detection_classes:0')
     num_detections = detection_graph.get_tensor_by_name('num_detections:0')
-
+    
+    img_process_start_time = time.time()
     for image_path in TEST_IMAGE_PATHS:
-      image = Image.open(image_path)
+        print 'process img:{}'.format(image_path)
+        image = Image.open(image_path)
 
-      # the array based representation of the image will be used later in order to prepare the
-      # result image with boxes and labels on it.
-      image_np = load_image_into_numpy_array(image)
+        # the array based representation of the image will be used later in order to prepare the
+        # result image with boxes and labels on it.
+        image_np = load_image_into_numpy_array(image)
 
-      # Expand dimensions since the model expects images to have shape: [1, None, None, 3]
-      image_np_expanded = np.expand_dims(image_np, axis=0)
+        # Expand dimensions since the model expects images to have shape: [1, None, None, 3]
+        image_np_expanded = np.expand_dims(image_np, axis=0)
 
-      # Actual detection.
-      (boxes, scores, classes, num) = sess.run(
+        # Actual detection.
+        (boxes, scores, classes, num) = sess.run(
           [detection_boxes, detection_scores, detection_classes, num_detections],
           feed_dict={image_tensor: image_np_expanded})
 
-      # Visualization of the results of a detection.
-      vis_util.visualize_boxes_and_labels_on_image_array(
+        # Visualization of the results of a detection.
+        vis_util.visualize_boxes_and_labels_on_image_array(
           image_np,
           np.squeeze(boxes),
           np.squeeze(classes).astype(np.int32),
@@ -142,7 +147,20 @@ with detection_graph.as_default():
           use_normalized_coordinates=True,
           line_thickness=8)
       
+        
+        plt.figure(figsize=IMAGE_SIZE)
+        #plt.imshow(image_np)
 
-      plt.figure(figsize=IMAGE_SIZE)
-      #plt.imshow(image_np)
-      plt.imsave('aaa.png', image_np)
+        # get image name
+        img_name = image_path.split('/')[-1]
+        out_img_path = PATH_TO_RESULT_DIR + '/{}_out.png'.format(img_name)
+        print out_img_path
+        plt.imsave(out_img_path, image_np)
+    
+    img_process_end_time = time.time()
+    
+    # calculate fps
+    detect_total_time = img_process_end_time - img_process_start_time 
+    print 'img process fps:{}'.format(len(TEST_IMAGE_PATHS)/float(detect_total_time))
+    print 'total detection time:{}s'.format(detect_total_time)
+
